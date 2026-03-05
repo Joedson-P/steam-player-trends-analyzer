@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
 from pathlib import Path
+import plotly.express as px
 
 st.set_page_config(page_title="Steam Trend Analyzer", layout="wide")
 
-st.title("Análises de Tendências na Steam")
-st.subheader("Análise de engajamento de usuários na plataforma Steam")
+st.title("Tendências na Steam")
+st.subheader("Análise de engajamento de usuários na plataforma Steam.")
 
 # Caminho para o arquivo CSV
 data_path = Path(__file__).parent.parent / "data" / "player_history.csv"
@@ -16,30 +17,43 @@ if data_path.exists():
     # Converter timestamps para datetime
     df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-    # Métricas de destaque
-    latest_timestamp = df['timestamp'].max()
-    latest_data = df[df['timestamp'] == latest_timestamp]
+    # --- SIDEBAR: Filtros ---
+    st.sidebar.header("Configurações de Visualização")
+    all_games = df['game'].unique()
+    selected_games = st.sidebar.multiselect("Selecione os jogos", all_games, default=all_games[:3])
 
-    col1, col2, col3 = st.columns(3)
+    # Filtrando o df
+    df_filtered = df[df['game'].isin(selected_games)]
 
-    with col1:
-        most_played = latest_data.loc[latest_data['player_count'].idxmax()]
-        st.metric(label="Jogo com mais jogadores", value=most_played['game'], delta=f"{most_played['player_count']:,}")
+    # --- MÉTRICAS COM DELTA ---
+    st.subheader("Métricas de Engajamento")
+    cols = st.columns(len(selected_games))
 
-    with col2:
-        total_players = latest_data['player_count'].sum()
-        st.metric(label="Total de jogadores ativos", value=f"{total_players:,}")
+    for i, game in enumerate(selected_games):
+        game_data = df[df['game'] == game].sort_values('timestamp')
+        if len(game_data) >= 1:
+            current = game_data.iloc[-1]['player_count']
+            delta = current - game_data.iloc[-2]['player_count'] if len(game_data) > 1 else 0
+            cols[i].metric(label=game, value=f"{current:,}", delta=f"{delta:,}")
 
-    with col3:
-        st.write(f"Última atualização: {latest_timestamp.strftime('%H-%M-%S')}")
+    st.divider()
 
-    # Gráfico Ranking Atual
-    st.write("### Ranking do número de jogadores")
-    chart_data = latest_data.sort_values(by='player_count', ascending=True)
-    st.bar_chart(chart_data, x='game', y='player_count', color="#2FEF21")
+    # --- GRÁFICO DE SÉRIE TEMPORAL ---
+    st.subheader("Evolução Temporal de Jogadores")
+    if not df_filtered.empty:
+        fig = px.line(df_filtered, x='timestamp', y='player_count', color='game',
+                      labels={'player_count': 'Jogadores Online', 'timestamp': 'Horário'},
+                      markers=True, template="plotly_dark")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Selecione pelo menos um jogo no menu lateral.")
 
-    with st.expander("Ver dados brutos"):
-        st.dataframe(df.sort_values(by='timestamp', ascending=False), use_container_width=True)
+    # --- RANKING ATUAL ---
+    st.subheader("Comparativo de Volume Atual")
+    latest_data = df[df['timestamp'] == df['timestamp'].max()]
+    fig_bar = px.bar(latest_data, x='player_count', y='game', orientation='h', 
+                     color='player_count', color_continuous_scale='Viridis')
+    st.plotly_chart(fig_bar, use_container_width=True)
 
 else:
-    st.error("Arquivo de dados não encontrado. Rode o script de extração primeiro!")
+    st.error("Arquivo de dados não encontrado.")
