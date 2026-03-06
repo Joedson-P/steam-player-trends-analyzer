@@ -17,13 +17,26 @@ if data_path.exists():
     # Converter timestamps para datetime
     df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-    # --- SIDEBAR: Filtros ---
-    st.sidebar.header("Configurações de Visualização")
+    # --- SIDEBAR: Hierarquia ---
+    st.sidebar.header("Painel de Controle")
+
+    # 1. FILTROS
     all_games = df['game'].unique()
     selected_games = st.sidebar.multiselect("Selecione os jogos", all_games, default=all_games[:3])
 
     # Filtrando o df
     df_filtered = df[df['game'].isin(selected_games)]
+
+    st.sidebar.divider()
+    
+    # 2. RECORDES
+    st.sidebar.subheader("Recordes da Sessão")
+    for game in enumerate(selected_games):
+        game_history = df[df['game'] == game]
+        if not game_history.empty:
+            peak = game_history['player_count'].max()
+            st.sidebar.write(f"**{game}**")
+            st.sidebar.caption(f"Pico: {peak:,} jogadores")
 
     # --- MÉTRICAS COM DELTA ---
     st.subheader("Métricas de Engajamento")
