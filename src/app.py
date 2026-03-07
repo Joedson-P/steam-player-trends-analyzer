@@ -17,6 +17,11 @@ if data_path.exists():
     # Converter timestamps para datetime
     df['timestamp'] = pd.to_datetime(df['timestamp'])
 
+    # Cálculo de insihgt global
+    total_by_time = df.groupby('timestamp')['player_count'].sum().reset_index()
+    peak_moment = total_by_time.loc[total_by_time['player_count'].idxmax()]
+    st.info(f"O pico de engajamento global nesta sessão foi em **{peak_moment['timestamp'].strftime('%d/%m %H:%M')}** com **{peak_moment['player_count']:,}** jogadores combinados.")
+
     # --- SIDEBAR: Hierarquia ---
     st.sidebar.header("Painel de Controle")
 
@@ -31,12 +36,14 @@ if data_path.exists():
     
     # 2. RECORDES
     st.sidebar.subheader("Recordes da Sessão")
-    for game in enumerate(selected_games):
+    for game in selected_games:
         game_history = df[df['game'] == game]
         if not game_history.empty:
             peak = game_history['player_count'].max()
             st.sidebar.write(f"**{game}**")
             st.sidebar.caption(f"Pico: {peak:,} jogadores")
+        else:
+            st.sidebar.caption(f"Sem dados para {game}")
 
     # --- MÉTRICAS COM DELTA ---
     st.subheader("Métricas de Engajamento")
@@ -57,7 +64,7 @@ if data_path.exists():
         fig = px.line(df_filtered, x='timestamp', y='player_count', color='game',
                       labels={'player_count': 'Jogadores Online', 'timestamp': 'Horário'},
                       markers=True, template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.warning("Selecione pelo menos um jogo no menu lateral.")
 
@@ -66,7 +73,7 @@ if data_path.exists():
     latest_data = df[df['timestamp'] == df['timestamp'].max()]
     fig_bar = px.bar(latest_data, x='player_count', y='game', orientation='h', 
                      color='player_count', color_continuous_scale='Viridis')
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width='stretch')
 
 else:
     st.error("Arquivo de dados não encontrado.")
