@@ -1,12 +1,13 @@
 import requests
 import pandas as pd
 import os
+import sqlite3
+from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
-
 load_dotenv()
-API_KEY = os.getenv('11A74229580C2F7CD3B416EA4CAEC081')
+API_KEY = os.getenv('STEAM_API_KEY')
 
 def get_player_count(app_id):
     url = f"http://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid={app_id}"
@@ -44,12 +45,15 @@ def collect_data():
 
     df = pd.DataFrame(results)
 
-    output_path = 'data\player_history.csv'
+    db_path = Path(__file__).parent.parent.parent / 'data' / 'steam_data.db'
 
-    if os.path.exists(output_path):
-        df.to_csv(output_path, mode='a', header=False, index=False)
-    else:
-        df.to_csv(output_path, index=False)
+    try:
+        conn = sqlite3.connect(db_path)
+        df.to_sql('player_stats', conn, if_exists='append', index=False)
+        conn.close()
+        print(f"Dados salvos com sucesso às {timestamp}.")
+    except Exception as e:
+        print(f"Erro ao salvar no banco de dados: {e}")
 
 if __name__ == "__main__":
     collect_data()

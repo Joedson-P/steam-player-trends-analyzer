@@ -2,20 +2,28 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 import plotly.express as px
+import sqlite3
 
 st.set_page_config(page_title="Steam Trend Analyzer", layout="wide")
 
 st.title("Tendências na Steam")
 st.subheader("Análise de engajamento de usuários na plataforma Steam.")
 
-# Caminho para o arquivo CSV
-data_path = Path(__file__).parent.parent / "data" / "player_history.csv"
+# Caminho para o database
+db_path = Path(__file__).parent.parent / "data" / "steam_data.db"
 
-if data_path.exists():
-    df = pd.read_csv(data_path)
+def load_data_from_db(path):
+    conn = sqlite3.connect(path)
+    query = "SELECT * FROM player_stats"
+    df_db = pd.read_sql(query, conn)
+    conn.close()
 
     # Converter timestamps para datetime
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df_db['timestamp'] = pd.to_datetime(df_db['timestamp'])
+    return df_db
+
+if db_path.exists():
+    df = load_data_from_db(db_path)
 
     # Cálculo de insihgt global
     total_by_time = df.groupby('timestamp')['player_count'].sum().reset_index()
@@ -31,6 +39,26 @@ if data_path.exists():
 
     # Filtrando o df
     df_filtered = df[df['game'].isin(selected_games)]
+
+    st.sidebar.divider()
+
+    # Filtro de data
+    st.sidebar.subheader("Período de Análise")
+
+    min_date = df['timestamp'].min().date()
+    max_date = df['timestamp'].max().date()
+
+    start_date, end_date = st.sidebar.date_input(
+        "Selecione o intervalo",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date
+    )
+
+    df_filtered = df_filtered[
+        (df_filtered['timestamp'].dt.date >= start_date) & 
+        (df_filtered['timestamp'].dt.date <= end_date)
+    ]
 
     st.sidebar.divider()
     
