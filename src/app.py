@@ -73,35 +73,98 @@ if db_path.exists():
         else:
             st.sidebar.caption(f"Sem dados para {game}")
 
-    # --- MÉTRICAS COM DELTA ---
-    st.subheader("Métricas de Engajamento")
-    cols = st.columns(len(selected_games))
+    # --- ESTRUTURA DE ABAS ---
+    tab1, tab2, tab3 = st.tabs([
+        "Evolução Temporal",
+        "Comparativo de Volume",
+        "Informações de Mercado"
+    ])
 
-    for i, game in enumerate(selected_games):
-        game_data = df[df['game'] == game].sort_values('timestamp')
-        if len(game_data) >= 1:
-            current = game_data.iloc[-1]['player_count']
-            delta = current - game_data.iloc[-2]['player_count'] if len(game_data) > 1 else 0
-            cols[i].metric(label=game, value=f"{current:,}", delta=f"{delta:,}")
+    # --- ABA 1: EVOLUÇÃO TEMPORAL ---
+    with tab1:
+        st.subheader("Métricas de Engajamento")
+        cols = st.columns(len(selected_games))
 
-    st.divider()
+        for i, game in enumerate(selected_games):
+            game_data = df[df['game'] == game].sort_values('timestamp')
+            if len(game_data) >= 1:
+                current = game_data.iloc[-1]['player_count']
+                delta = current - game_data.iloc[-2]['player_count'] if len(game_data) > 1 else 0
+                cols[i].metric(label=game, value=f"{current:,}", delta=f"{delta:,}")
 
-    # --- GRÁFICO DE SÉRIE TEMPORAL ---
-    st.subheader("Evolução Temporal de Jogadores")
-    if not df_filtered.empty:
-        fig = px.line(df_filtered, x='timestamp', y='player_count', color='game',
-                      labels={'player_count': 'Jogadores Online', 'timestamp': 'Horário'},
-                      markers=True, template="plotly_dark")
-        st.plotly_chart(fig, width='stretch')
-    else:
-        st.warning("Selecione pelo menos um jogo no menu lateral.")
+        st.divider()
 
-    # --- RANKING ATUAL ---
-    st.subheader("Comparativo de Volume Atual")
-    latest_data = df[df['timestamp'] == df['timestamp'].max()]
-    fig_bar = px.bar(latest_data, x='player_count', y='game', orientation='h', 
-                     color='player_count', color_continuous_scale='Viridis')
-    st.plotly_chart(fig_bar, width='stretch')
+        st.subheader("Série Temporal de Jogadores")
+        if not df_filtered.empty:
+            fig = px.line(df_filtered, x='timestamp', y='player_count', color='game',
+                        labels={'player_count': 'Jogadores Online', 'timestamp': 'Horário'},
+                        markers=True, template="plotly_dark")
+            st.plotly_chart(fig, width='stretch')
+        else:
+            st.warning("Selecione pelo menos um jogo no menu lateral.")
+
+    # --- ABA 2: COMPARATIVO DE VOLUME ---
+    with tab2:
+        st.subheader("_Market Share_ e Volume Atual")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("**Ranking por Volume Atual**")
+            latest_data = df[df['timestamp'] == df['timestamp'].max()]
+            fig_bar = px.bar(latest_data, x='player_count', y='game', orientation='h', 
+                            color='player_count', color_continuous_scale='Viridis')
+            st.plotly_chart(fig_bar, width='stretch')
+
+        with col2:
+            st.write("**Participação Média no Período**")
+            df_share = df_filtered.groupby('game')['player_count'].mean().reset_index()
+            fig_pie = px.pie(df_share, values='player_count', names='game', hole=0.4)
+            st.plotly_chart(fig_pie, width="stretch")
+
+    with tab3:
+        st.subheader("Análise de Horário Nobre")
+
+        total_by_time = df_filtered.groupby('timestamp')['player_count'].sum().reset_index()
+        if not total_by_time.empty:
+            peak_moment = total_by_time.loc[total_by_time['player_count'].idxmax()]
+
+            st.info(f"**Insight:** O pico de engajamento no período selecionado foi em "
+                    f"**{peak_moment['timestamp'].strftime('%D/%M %H:%M')}** com "
+                    f"**{peak_moment['player_count']:,}** jogadores combinados.")
+            
+            fig_area = px.area(total_by_time, x='timestamp', y='player_count',
+                               title="Volume Total Acumulado",
+                               color_discrete_sequence=['#00CC96'])
+            st.plotly_chart(fig_area, width='stretch')
+
+        st.divider()
+
+        st.subheader("Índice de Estabilidade do Público")
+        st.caption("Mede a variação entre o pico e a média.")
+
+        estabilidade_lista = []
+
+        for game in selected_games:
+            stats = df_filtered[df_filtered['game'] == game]['player_count'].agg(['mean', 'std', 'min', 'max'])
+            if stats['mean'] > 0:
+                cv = (stats['std'] / stats['mean']) * 100
+                estabilidade_lista.append({
+                    "Jogo": game,
+                    "Média": f"{int(stats['mean']):,}",
+                    "Pico": f"{int(stats['max']):,}",
+                    "Variação": round(cv, 2)
+                })
+
+        df_estabilidade = pd.DataFrame(estabilidade_lista).sort_values("Variação")
+
+        st.table(df_estabilidade)
+
+        st.info("""
+        **Como ler este índice:**
+        - **Variação Baixa (< 20%):** Público constante (provavelmente jogadores de várias regiões do mundo).
+        - **Variação Alta (> 50%):** Público muito concentrado em um fuso horário.
+        """)
 
 else:
     st.error("Arquivo de dados não encontrado.")
